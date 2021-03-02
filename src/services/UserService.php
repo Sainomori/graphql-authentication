@@ -296,6 +296,7 @@ class UserService extends Component
                     'email' => Type::string(),
                     'firstName' => Type::string(),
                     'lastName' => Type::string(),
+                    'username' => Type::string(),
                 ],
                 UserArguments::getContentArguments()
             ),
@@ -307,7 +308,6 @@ class UserService extends Component
                 }
 
                 if (isset($arguments['email'])) {
-                    $user->username = $arguments['email'];
                     $user->email = $arguments['email'];
                 }
 
@@ -317,6 +317,10 @@ class UserService extends Component
 
                 if (isset($arguments['lastName'])) {
                     $user->lastName = $arguments['lastName'];
+                }
+                
+                if (isset($arguments['username'])) {
+                    $user->username = $arguments['username'];
                 }
 
                 $customFields = UserArguments::getContentArguments();
