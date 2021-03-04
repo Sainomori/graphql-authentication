@@ -4,12 +4,15 @@ namespace jamesedmonston\graphqlauthentication\services;
 
 use Craft;
 use craft\base\Component;
+use craft\elements\Asset;
 use craft\elements\User;
 use craft\gql\arguments\elements\User as UserArguments;
 use craft\gql\interfaces\elements\User as ElementsUser;
 use craft\helpers\DateTimeHelper;
+use craft\helpers\FileHelper;
 use craft\helpers\StringHelper;
 use craft\records\User as UserRecord;
+use craft\services\Assets;
 use craft\services\Gql;
 use GraphQL\Type\Definition\Type;
 use jamesedmonston\graphqlauthentication\gql\Auth;
@@ -297,6 +300,7 @@ class UserService extends Component
                     'firstName' => Type::string(),
                     'lastName' => Type::string(),
                     'username' => Type::string(),
+                    'pictureUrl' => Type::string()
                 ],
                 UserArguments::getContentArguments()
             ),
@@ -321,6 +325,21 @@ class UserService extends Component
                 
                 if (isset($arguments['username'])) {
                     $user->username = $arguments['username'];
+                }
+
+                if (isset($arguments['pictureUrl'])) {
+                    $localFileData = $this->_downloadSafePicture($arguments['pictureUrl']);
+                    if (is_array($localFileData)) {
+                        $users = Craft::$app->getUsers();
+                        try {
+                            $users->saveUserPhoto($localFileData['fileLocation'], $user, $localFileData['filename']);
+                        } catch (\Throwable $e) {
+                            if (file_exists($localFileData['fileLocation'])) {
+                                FileHelper::unlink($localFileData['fileLocation']);
+                            }
+                            throw $e;
+                        }
+                    }
                 }
 
                 $customFields = UserArguments::getContentArguments();
@@ -485,5 +504,52 @@ class UserService extends Component
         $userRecord = UserRecord::findOne($user->id);
         $userRecord->lastLoginDate = $now;
         $userRecord->save();
+    }
+
+    protected function _getFileContentByCurl(string $url): string
+    {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_URL, $url);
+        return curl_exec($ch);
+    }
+
+    /**
+     * It downloads image file by URL, tries to check if it is a real image and saves it in a safe place
+     *
+     * @param string $url
+     * @return array|null
+     * @throws \yii\base\ErrorException
+     * @throws \yii\base\Exception
+     */
+    protected function _downloadSafePicture(string $url): ?array
+    {
+        $pathinfo = pathinfo($url);
+        $filename = $pathinfo['basename'];
+        $extension = $pathinfo['extension'];
+
+        if (!$extension) {
+            Craft::warning('Could not determine file extension for user photo.', __METHOD__);
+            return null;
+        }
+
+        $fileLocation = \craft\helpers\Assets::tempFilePath($extension);
+        $photoData = $this->_getFileContentByCurl($url);
+        FileHelper::writeToFile($fileLocation, $photoData);
+
+        $verifyimg = getimagesize($fileLocation);
+        $pattern = "#^(image/)[^\s\n<]+$#i";
+        if (!preg_match($pattern, $verifyimg['mime'])) {
+            if (file_exists($fileLocation)) {
+                FileHelper::unlink($fileLocation);
+            }
+            Craft::warning('Could not determine file extension for user photo.', __METHOD__);
+            return null;
+        }
+
+        return [
+            'fileLocation' => $fileLocation,
+            'filename' => $filename
+        ];
     }
 }
