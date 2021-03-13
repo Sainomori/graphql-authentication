@@ -372,6 +372,33 @@ class UserService extends Component
             },
         ];
 
+        if ($fieldsService->getFieldByHandle('savedJobs')) {
+            $event->mutations['addSavedJob'] = [
+                'description' => 'Adds Saved Job',
+                'type' => Type::boolean(),
+                'args' => [
+                    'jobId' => Type::nonNull(Type::string()),
+                    'note' => Type::nonNull(Type::string()),
+                ],
+                'resolve' => function ($source, array $arguments) use ($elements, $settings, $tokenService, $errorService, $fieldsService) {
+                    $user = $tokenService->getUserFromToken();
+                    if (!$user) {
+                        $errorService->throw($settings->invalidUserUpdate, 'INVALID');
+                    }
+                    $value = $user->getFieldValue('savedJobs');
+                    $value[] = [
+                        'jobId' => $arguments['jobId'],
+                        'note' => $arguments['note']
+                    ];
+                    $user->setFieldValue('savedJobs', $value);
+                    if (!$elements->saveElement($user)) {
+                        $errorService->throw(json_encode($user->getErrors()), 'INVALID');
+                    }
+                    return true;
+                },
+            ];
+        }
+
         $event->mutations['deleteCurrentToken'] = [
             'description' => 'Deletes authenticated user access token. Useful for logging out of current device. Returns boolean.',
             'type' => Type::nonNull(Type::boolean()),
